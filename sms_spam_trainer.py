@@ -5,7 +5,13 @@ import os
 import tensorflow_hub as hub
 from tfx.components.trainer.fn_args_utils import FnArgs
  
-LABEL_KEY = "label"
+dataset_size = 5574
+BATCH_SIZE = 64
+
+STEPS_PER_EPOCH = dataset_size // BATCH_SIZE
+VALIDATION_STEPS = STEPS_PER_EPOCH // 5
+
+LABEL_KEY = "spam"
 FEATURE_KEY = "sms"
  
 def transformed_name(key):
@@ -37,10 +43,6 @@ def input_fn(file_pattern,
         label_key = transformed_name(LABEL_KEY))
     return dataset
  
-# os.environ['TFHUB_CACHE_DIR'] = '/hub_chace'
-# embed = hub.KerasLayer("https://tfhub.dev/google/universal-sentence-encoder/4")
- 
-# Vocabulary size and number of words in a sequence.
 VOCAB_SIZE = 10000
 SEQUENCE_LENGTH = 100
  
@@ -59,7 +61,7 @@ def model_builder():
     x = vectorize_layer(reshaped_narrative)
     x = layers.Embedding(VOCAB_SIZE, embedding_dim, name="embedding")(x)
     x = layers.GlobalAveragePooling1D()(x)
-    x = layers.Dense(64, activation='relu')(x)
+    x = layers.Dense(120, activation='relu')(x)
     x = layers.Dense(32, activation="relu")(x)
     outputs = layers.Dense(1, activation='sigmoid')(x)
     
@@ -68,12 +70,10 @@ def model_builder():
     
     model.compile(
         loss = 'binary_crossentropy',
-        optimizer=tf.keras.optimizers.Adam(0.01),
+        optimizer=tf.keras.optimizers.Adam(),
         metrics=[tf.keras.metrics.BinaryAccuracy(),'AUC','FalsePositives','TruePositives', 'FalseNegatives', 'TrueNegatives']
     
     )
-    
-    # print(model)
     model.summary()
     return model 
  
@@ -93,11 +93,10 @@ def _get_serve_tf_examples_fn(model, tf_transform_output):
         
         transformed_features = model.tft_layer(parsed_features)
         
-        # get predictions using the transformed features
         return model(transformed_features)
         
     return serve_tf_examples_fn
-    
+
 def run_fn(fn_args: FnArgs) -> None:
     
     log_dir = os.path.join(os.path.dirname(fn_args.serving_model_dir), 'logs')
@@ -124,13 +123,12 @@ def run_fn(fn_args: FnArgs) -> None:
     # Build the model
     model = model_builder()
     
-    
     # Train the model
     model.fit(x = train_set,
             validation_data = val_set,
             callbacks = [tensorboard_callback, es, mc],
-            steps_per_epoch = 1000, 
-            validation_steps= 1000,
+            steps_per_epoch = STEPS_PER_EPOCH, 
+            validation_steps= VALIDATION_STEPS,
             epochs=10)
     signatures = {
         'serving_default':
