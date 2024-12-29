@@ -1,4 +1,4 @@
-# Submission 1: Nama Proyek Anda
+# Submission 2: Diabetes Prediction
 
 Nama: Wahid Hasim Santoso
 
